@@ -1,19 +1,6 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import {
-  addDummyDbItems,
-  addDbItem,
-  getAllDbItems,
-  getDbItemById,
-  DbItem,
-  updateDbItemById,
-} from "./db";
-import filePath from "./filePath";
-
-// loading in some dummy items into the database
-// (comment out if desired, or change the number)
-addDummyDbItems(20);
 
 const app = express();
 
@@ -28,57 +15,95 @@ dotenv.config();
 // use the environment variable PORT, or 4000 as a fallback
 const PORT_NUMBER = process.env.PORT ?? 4000;
 
-// API info page
-app.get("/", (req, res) => {
-  const pathToFile = filePath("../public/index.html");
-  res.sendFile(pathToFile);
+const Pool = require("pg").Pool;
+
+const pool = new Pool({
+  database: "db_todo",
 });
 
-// GET /items
-app.get("/items", (req, res) => {
-  const allSignatures = getAllDbItems();
-  res.status(200).json(allSignatures);
+app.post("/todos", async (req, res) => {
+  try {
+    const { description, creation_date, due_date } = req.body;
+    const newTodo = await pool.query(
+      "insert into todo (description, creation_date, due_date, completed_status) values ($1, $2, $3, false)",
+      [`%${description}%`, `%${creation_date}%`, `%${due_date}%`]
+    );
+    res.json(newTodo.rows[0]);
+  } catch (err) {
+    console.error(err.message);
+  }
 });
-
-// POST /items
-app.post<{}, {}, DbItem>("/items", (req, res) => {
-  // to be rigorous, ought to handle non-conforming request bodies
-  // ... but omitting this as a simplification
-  const postData = req.body;
-  const createdSignature = addDbItem(postData);
-  res.status(201).json(createdSignature);
+// - seeing all todos
+app.get("/todos", async (req, res) => {
+  try {
+    const allTodos = await pool.query(
+      "select * from todo order by creation_date"
+    );
+    res.json(allTodos.rows);
+  } catch (err) {
+    console.error(err.message);
+  }
 });
-
-// GET /items/:id
-app.get<{ id: string }>("/items/:id", (req, res) => {
-  const matchingSignature = getDbItemById(parseInt(req.params.id));
-  if (matchingSignature === "not found") {
-    res.status(404).json(matchingSignature);
-  } else {
-    res.status(200).json(matchingSignature);
+// - editing todos
+app.put("/todos/:id", async (req, res) => {
+  try {
+    const { description } = req.body;
+    const updateTodo = await pool.query(
+      "update todo set description = $1 where id = $2",
+      [`%${description}%`, `%${req.params.id}%`]
+    );
+    res.json(updateTodo.rows[0]);
+  } catch (err) {
+    console.error(err.message);
+  }
+});
+// - Mark todos as 'complete'
+app.put("/todos/:id", async (req, res) => {
+  try {
+    const { completed_status } = req.body;
+    const setCompleted = await pool.query(
+      "update todo set completed_status = $1 where id = $2",
+      [`%${completed_status}%`, `%${req.params.id}%`]
+    );
+    res.json(setCompleted.rows[0]);
+  } catch (err) {
+    console.error(err.message);
+  }
+});
+// - Deleting todos
+app.put("/todos/:id", async (req, res) => {
+  try {
+    const deleteItem = await pool.query("delete from todo where id = $1", [
+      `%${req.params.id}%`,
+    ]);
+    res.json(deleteItem.rows[0]);
+  } catch (err) {
+    console.error(err.message);
+  }
+});
+// - Sorting todos by creation date
+app.get("/todos/newest", async (req, res) => {
+  try {
+    const newestTodos = await pool.query(
+      "select * from todos order by creation_date desc"
+    );
+    res.json(newestTodos.rows);
+  } catch (err) {
+    console.error(err.message);
+  }
+});
+// - Filtering overdue todos
+app.get("/todos/overdue", async (req, res) => {
+  try {
+    const overdueTodos = await pool.query(
+      "select * from todos order by creation_date where due_date < current_date"
+    );
+    res.json(overdueTodos.rows);
+  } catch (err) {
+    console.error(err.message);
   }
 });
 
-// DELETE /items/:id
-app.delete<{ id: string }>("/items/:id", (req, res) => {
-  const matchingSignature = getDbItemById(parseInt(req.params.id));
-  if (matchingSignature === "not found") {
-    res.status(404).json(matchingSignature);
-  } else {
-    res.status(200).json(matchingSignature);
-  }
-});
-
-// PATCH /items/:id
-app.patch<{ id: string }, {}, Partial<DbItem>>("/items/:id", (req, res) => {
-  const matchingSignature = updateDbItemById(parseInt(req.params.id), req.body);
-  if (matchingSignature === "not found") {
-    res.status(404).json(matchingSignature);
-  } else {
-    res.status(200).json(matchingSignature);
-  }
-});
-
-app.listen(PORT_NUMBER, () => {
-  console.log(`Server is listening on port ${PORT_NUMBER}!`);
+app.listen(5000, () => {
+  console.log("Server has started listening on Port 5000");
 });
