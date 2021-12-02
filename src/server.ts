@@ -15,18 +15,19 @@ dotenv.config();
 // use the environment variable PORT, or 4000 as a fallback
 const PORT_NUMBER = process.env.PORT ?? 4000;
 
-const Pool = require("pg").Pool;
+import { Client } from "pg";
 
-const pool = new Pool({
-  database: "db_todo",
+const client = new Client({
+  database: "dbtodo",
 });
+client.connect();
 
 app.post("/todos", async (req, res) => {
   try {
-    const { description, creation_date, due_date } = req.body;
-    const newTodo = await pool.query(
-      "insert into todo (description, creation_date, due_date, completed_status) values ($1, $2, $3, false)",
-      [`%${description}%`, `%${creation_date}%`, `%${due_date}%`]
+    const { description, due_date } = req.body;
+    const newTodo = await client.query(
+      "insert into todo (description, due_date) values ($1, $2)",
+      [`${description}`, `%${due_date}%`]
     );
     res.json(newTodo.rows[0]);
   } catch (err) {
@@ -36,7 +37,7 @@ app.post("/todos", async (req, res) => {
 // - seeing all todos
 app.get("/todos", async (req, res) => {
   try {
-    const allTodos = await pool.query(
+    const allTodos = await client.query(
       "select * from todo order by creation_date"
     );
     res.json(allTodos.rows);
@@ -47,10 +48,11 @@ app.get("/todos", async (req, res) => {
 // - editing todos
 app.put("/todos/:id", async (req, res) => {
   try {
+    const { id } = req.params;
     const { description } = req.body;
-    const updateTodo = await pool.query(
+    const updateTodo = await client.query(
       "update todo set description = $1 where id = $2",
-      [`%${description}%`, `%${req.params.id}%`]
+      [description, id]
     );
     res.json(updateTodo.rows[0]);
   } catch (err) {
@@ -60,10 +62,11 @@ app.put("/todos/:id", async (req, res) => {
 // - Mark todos as 'complete'
 app.put("/todos/:id", async (req, res) => {
   try {
+    const { id } = req.params;
     const { completed_status } = req.body;
-    const setCompleted = await pool.query(
+    const setCompleted = await client.query(
       "update todo set completed_status = $1 where id = $2",
-      [`%${completed_status}%`, `%${req.params.id}%`]
+      [completed_status, id]
     );
     res.json(setCompleted.rows[0]);
   } catch (err) {
@@ -71,20 +74,21 @@ app.put("/todos/:id", async (req, res) => {
   }
 });
 // - Deleting todos
-app.put("/todos/:id", async (req, res) => {
+app.delete("/todos/:id", async (req, res) => {
   try {
-    const deleteItem = await pool.query("delete from todo where id = $1", [
-      `%${req.params.id}%`,
+    const { id } = req.params;
+    const deleteItem = await client.query("delete from todo where id = $1", [
+      id,
     ]);
-    res.json(deleteItem.rows[0]);
+    res.json("to do deleted");
   } catch (err) {
     console.error(err.message);
   }
 });
-// - Sorting todos by creation date
+// - Sorting todos by creation date --- TIMEOUT
 app.get("/todos/newest", async (req, res) => {
   try {
-    const newestTodos = await pool.query(
+    const newestTodos = await client.query(
       "select * from todos order by creation_date desc"
     );
     res.json(newestTodos.rows);
@@ -92,10 +96,10 @@ app.get("/todos/newest", async (req, res) => {
     console.error(err.message);
   }
 });
-// - Filtering overdue todos
+// - Filtering overdue todos --- TIMEOUT
 app.get("/todos/overdue", async (req, res) => {
   try {
-    const overdueTodos = await pool.query(
+    const overdueTodos = await client.query(
       "select * from todos order by creation_date where due_date < current_date"
     );
     res.json(overdueTodos.rows);
