@@ -1,19 +1,6 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import {
-  addDummyDbItems,
-  addDbItem,
-  getAllDbItems,
-  getDbItemById,
-  DbItem,
-  updateDbItemById,
-} from "./db";
-import filePath from "./filePath";
-
-// loading in some dummy items into the database
-// (comment out if desired, or change the number)
-addDummyDbItems(20);
 
 const app = express();
 
@@ -28,57 +15,107 @@ dotenv.config();
 // use the environment variable PORT, or 4000 as a fallback
 const PORT_NUMBER = process.env.PORT ?? 4000;
 
-// API info page
-app.get("/", (req, res) => {
-  const pathToFile = filePath("../public/index.html");
-  res.sendFile(pathToFile);
+if (!process.env.DATABASE_URL) {
+  throw "No DATABASE_URL env var!  Have you made a .env file?  And set up dotenv?";
+}
+
+import { Client } from "pg";
+
+const client = new Client({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false,
+  },
 });
 
-// GET /items
-app.get("/items", (req, res) => {
-  const allSignatures = getAllDbItems();
-  res.status(200).json(allSignatures);
-});
+client.connect();
 
-// POST /items
-app.post<{}, {}, DbItem>("/items", (req, res) => {
-  // to be rigorous, ought to handle non-conforming request bodies
-  // ... but omitting this as a simplification
-  const postData = req.body;
-  const createdSignature = addDbItem(postData);
-  res.status(201).json(createdSignature);
+app.post("/todos", async (req, res) => {
+  try {
+    const { description, due_date } = req.body;
+    const newTodo = await client.query(
+      "insert into todo (description, due_date, completed_status) values ($1, $2, false)",
+      [`${description}`, `%${due_date}%`]
+    );
+    res.json(newTodo.rows[0]);
+  } catch (err) {
+    console.error(err.message);
+  }
 });
-
-// GET /items/:id
-app.get<{ id: string }>("/items/:id", (req, res) => {
-  const matchingSignature = getDbItemById(parseInt(req.params.id));
-  if (matchingSignature === "not found") {
-    res.status(404).json(matchingSignature);
-  } else {
-    res.status(200).json(matchingSignature);
+// - seeing all todos
+app.get("/todos", async (req, res) => {
+  try {
+    const allTodos = await client.query(
+      "select * from todo order by creation_date"
+    );
+    res.json(allTodos.rows);
+  } catch (err) {
+    console.error(err.message);
+  }
+});
+// - editing todos
+app.put("/todos/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { description } = req.body;
+    const updateTodo = await client.query(
+      "update todo set description = $1 where id = $2",
+      [description, id]
+    );
+    res.json(updateTodo.rows[0]);
+  } catch (err) {
+    console.error(err.message);
+  }
+});
+// - Mark todos as 'complete'
+app.put("/todos/completed/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { completed_status } = req.body;
+    const setCompleted = await client.query(
+      "update todo set completed_status = $1 where id = $2",
+      [completed_status, id]
+    );
+    res.json(setCompleted.rows[0]);
+  } catch (err) {
+    console.error(err.message);
+  }
+});
+// - Deleting todos
+app.delete("/todos/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deleteItem = await client.query("delete from todo where id = $1", [
+      id,
+    ]);
+    res.json("to do deleted");
+  } catch (err) {
+    console.error(err.message);
+  }
+});
+// - Sorting todos by creation date --- TIMEOUT
+app.get("/todos/newest", async (req, res) => {
+  try {
+    const newestTodos = await client.query(
+      "select * from todos order by creation_date desc"
+    );
+    res.json(newestTodos.rows);
+  } catch (err) {
+    console.error(err.message);
+  }
+});
+// - Filtering overdue todos --- TIMEOUT
+app.get("/todos/overdue", async (req, res) => {
+  try {
+    const overdueTodos = await client.query(
+      "select * from todos order by creation_date where due_date < current_date"
+    );
+    res.json(overdueTodos.rows);
+  } catch (err) {
+    console.error(err.message);
   }
 });
 
-// DELETE /items/:id
-app.delete<{ id: string }>("/items/:id", (req, res) => {
-  const matchingSignature = getDbItemById(parseInt(req.params.id));
-  if (matchingSignature === "not found") {
-    res.status(404).json(matchingSignature);
-  } else {
-    res.status(200).json(matchingSignature);
-  }
-});
-
-// PATCH /items/:id
-app.patch<{ id: string }, {}, Partial<DbItem>>("/items/:id", (req, res) => {
-  const matchingSignature = updateDbItemById(parseInt(req.params.id), req.body);
-  if (matchingSignature === "not found") {
-    res.status(404).json(matchingSignature);
-  } else {
-    res.status(200).json(matchingSignature);
-  }
-});
-
-app.listen(PORT_NUMBER, () => {
-  console.log(`Server is listening on port ${PORT_NUMBER}!`);
+app.listen(5000, () => {
+  console.log("Server has started listening on Port 5000");
 });
