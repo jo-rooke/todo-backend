@@ -15,18 +15,26 @@ dotenv.config();
 // use the environment variable PORT, or 4000 as a fallback
 const PORT_NUMBER = process.env.PORT ?? 4000;
 
+if (!process.env.DATABASE_URL) {
+  throw "No DATABASE_URL env var!  Have you made a .env file?  And set up dotenv?";
+}
+
 import { Client } from "pg";
 
 const client = new Client({
-  database: "dbtodo",
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false,
+  },
 });
+
 client.connect();
 
 app.post("/todos", async (req, res) => {
   try {
     const { description, due_date } = req.body;
     const newTodo = await client.query(
-      "insert into todo (description, due_date) values ($1, $2)",
+      "insert into todo (description, due_date, completed_status) values ($1, $2, false)",
       [`${description}`, `%${due_date}%`]
     );
     res.json(newTodo.rows[0]);
@@ -60,7 +68,7 @@ app.put("/todos/:id", async (req, res) => {
   }
 });
 // - Mark todos as 'complete'
-app.put("/todos/:id", async (req, res) => {
+app.put("/todos/completed/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const { completed_status } = req.body;
