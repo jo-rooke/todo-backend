@@ -12,8 +12,16 @@ app.use(cors());
 // read in contents of any environment variables in the .env file
 dotenv.config();
 
-// use the environment variable PORT, or 4000 as a fallback
-const PORT_NUMBER = process.env.PORT ?? 4000;
+const connectToHeroku = process.env.NODE_ENV === "production";
+
+const config = {
+  connectionString: process.env.DATABASE_URL,
+  ssl: connectToHeroku
+    ? {
+        rejectUnauthorized: false,
+      }
+    : false,
+};
 
 if (!process.env.DATABASE_URL) {
   throw "No DATABASE_URL env var!  Have you made a  your.env file?  And set up dotenv?";
@@ -21,12 +29,7 @@ if (!process.env.DATABASE_URL) {
 
 import { Client } from "pg";
 
-const client = new Client({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false,
-  },
-});
+const client = new Client(config);
 
 client.connect();
 
@@ -116,6 +119,6 @@ app.get("/todos/overdue", async (req, res) => {
   }
 });
 
-app.listen(5000, () => {
+app.listen(process.env.PORT, () => {
   console.log("Server has started listening on Port 5000");
 });
