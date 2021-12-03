@@ -16,7 +16,7 @@ dotenv.config();
 const PORT_NUMBER = process.env.PORT ?? 4000;
 
 if (!process.env.DATABASE_URL) {
-  throw "No DATABASE_URL env var!  Have you made a .env file?  And set up dotenv?";
+  throw "No DATABASE_URL env var!  Have you made a  your.env file?  And set up dotenv?";
 }
 
 import { Client } from "pg";
